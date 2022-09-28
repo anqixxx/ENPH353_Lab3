@@ -9,6 +9,7 @@ from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge, CvBridgeError
+import matplotlib.pyplot as plt
 
 
 class image_converter:
@@ -19,7 +20,7 @@ class image_converter:
     # All are objects
 
     # A publisher is created, the input is what channel it will publish
-    self.twist_pub = rospy.Publisher('/cmd_vel', Twist)
+    self.twist_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
 
     self.move = Twist()
 
@@ -32,6 +33,7 @@ class image_converter:
 
   # More similar to an interupt
   def callback(self,data):
+    #print("Callback")
     try:
     # Translates from ROS images to CV image
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
@@ -41,18 +43,75 @@ class image_converter:
     
     (rows,cols,channels) = cv_image.shape
 
+    #cv2.imshow('cv image',cv_image)
 
-    #Perform operations until we can let out self object know how to move
-    edges = cv2.Canny(cv_image, 100, 200)
+    # Perform operations until we can let out self object know how to move
+    # Image Preprocessing
+    gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+    # Thresholding
+    ret,bin_img = cv2.threshold(gray,100,255,cv2.THRESH_BINARY_INV)
+    xdim = bin_img.shape[0]
+    ydim = bin_img.shape[1]
 
-    # After information is published, self.twist_pub.publish(self.move)
+    # Define the move object
+    move = Twist()
+    first = 0
+    second = 0
+
+    # Finds the location of the first white dot, which is where the line starts
+    for x in range(0, xdim):
+      if (bin_img[-1][x] == 255):
+        first = x
+        break
+
+    # Finds the location of the first black dot after the white, which is where the line ends
+    for x in range(first, xdim):
+      if (bin_img[-1][x] == 0):
+        second = x
+        break
+
+    # Code for iteration if the robot is not directly started on the line
+    # y = -1
+    # while first==0 and second ==0:
+    #   y = y-1
+    #   for x in range(0, xdim):
+    #     if (bin_img[-2][x] == 255):
+    #       first = x
+    #       break
+
+    #   for x in range(first, xdim):
+    #     if (bin_img[-2][x] == 0):
+    #       second = x
+    #       break
+      
+
+    xMax = second
+    xMin = first
+    
+    # Fiinds the difference between the right edge of the line and the end of the frame
+    maxDiff = xdim - xMax
+
+    # If the line is more to the right then the left, move to the left
+    if (maxDiff > (xMin-10)):
+      move.angular.z = 0.25
+      self.twist_pub.publish(move)
+
+    # If the line is more to the left then the right, move to the right
+    if (xMin > (maxDiff +10)):
+      move.angular.z = -0.25
+      self.twist_pub.publish(move)
+
+    # If the line is near the center, move straight
+    if (xMin < maxDiff + 10 or xMin > maxDiff -10):
+      move.linear.x = .25
+      self.twist_pub.publish(move)
+
 
     # Use if statements and move.linear and move.angular to find it
 
-
 def main(args):
-  ic = image_converter()
   rospy.init_node('image_converter', anonymous=True)
+  ic = image_converter()
   try:
     rospy.spin()
   except KeyboardInterrupt:

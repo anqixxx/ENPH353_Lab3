@@ -12,7 +12,7 @@
     </include>
 
 
-    <!-- <include file="$(find enph353_ros_lab)/launch/move_robot.launch">
-    </include> -->
+    <include file="$(find enph353_ros_lab)/launch/line_follow.launch">
+    </include>
 
 </launch>
